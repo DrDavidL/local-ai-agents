@@ -1,0 +1,35 @@
+literature:
+  search_terms:
+    - '"clinical informatics" OR "clinical decision support" OR "medical AI"'
+    - '"large language model" AND ("medicine" OR "healthcare" OR "clinical")'
+    - '"machine learning" AND ("EHR" OR "electronic health record")'
+    - '"AI" AND ("diagnosis" OR "radiology" OR "pathology")'
+  arxiv_categories:
+    - cs.AI
+    - cs.CL
+    - cs.LG
+  biorxiv_subjects:
+    - bioinformatics
+
+news:
+  rss_feeds:
+    - name: "STAT News"
+      url: "https://www.statnews.com/feed/"
+    - name: "Healthcare IT News"
+      url: "https://www.healthcareitnews.com/feed"
+    - name: "MIT Technology Review AI"
+      url: "https://www.technologyreview.com/topic/artificial-intelligence/feed"
+    - name: "Nature Medicine"
+      url: "http://feeds.nature.com/nm/rss/current"
+    - name: "Hacker News"
+      url: "https://hnrss.org/newest?q=AI+OR+medical+OR+healthcare+OR+LLM"
+  keywords_filter:
+    - "medical AI"
+    - "clinical informatics"
+    - "health IT"
+    - "LLM"
+    - "large language model"
+    - "healthcare"
+    - "EHR"
+    - "FDA"
+    - "clinical decision support"

@@ -1,0 +1,31 @@
+search_terms:
+  - "clinical informatics"
+  - '"artificial intelligence" AND "health"'
+  - '"machine learning" AND "clinical"'
+  - "decision support"
+  - '"natural language processing" AND "medicine"'
+
+nih:
+  activity_codes:
+    - R01
+    - R21
+    - R03
+    - U01
+    - K23
+    - K08
+    - T32
+    - P30
+  ic_codes:
+    - NLM
+    - NIBIB
+    - NCI
+    - NHLBI
+    - NIGMS
+
+grants_gov:
+  categories:
+    - "Health"
+    - "Science and Technology and other Research and Development"
+  agencies:
+    - "Department of Health and Human Services"
+    - "National Science Foundation"

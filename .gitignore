@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+data/history.json
+data/drafts/
+data/scheduler.log
+data/scheduler.err
+.pytest_cache/
+dist/
+*.egg-info/

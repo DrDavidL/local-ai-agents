@@ -1,0 +1,25 @@
+[project]
+name = "local-ai-agents"
+version = "0.1.0"
+description = "Scheduled AI agents for literature, email, news, and grant monitoring"
+requires-python = ">=3.11"
+dependencies = [
+    "openai",
+    "pyyaml",
+    "python-dotenv",
+    "httpx",
+    "feedparser",
+    "apscheduler>=3.10,<4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+]
+sms = [
+    "twilio",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

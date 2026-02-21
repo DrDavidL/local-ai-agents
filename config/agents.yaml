@@ -1,0 +1,47 @@
+ollama:
+  base_url: "http://localhost:11434/v1"
+  model: "devstral-small-2"
+  temperature: 0.3
+  max_tokens: 2048
+
+delivery:
+  shortcuts_bridge:
+    url: "http://localhost:9876"
+    # Token loaded from SHORTCUTS_BRIDGE_TOKEN env var
+  email:
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    # Credentials from EMAIL_SENDER, EMAIL_RECIPIENT, GMAIL_APP_PASSWORD env vars
+  drafts_dir: "data/drafts"
+  # Shortcut names are read from env vars:
+  # SHORTCUT_TEXT, SHORTCUT_NOTIFICATION, SHORTCUT_REMINDER
+
+agents:
+  literature:
+    enabled: true
+    schedule:
+      cron: "30 6 * * 1-5"  # 6:30 AM weekdays
+    delivery: [text, email, notification]
+    max_items: 5
+
+  email_triage:
+    enabled: true
+    gmail_label: "AI-REVIEW"
+    schedule:
+      cron: "0 8-18/2 * * 1-5"  # Every 2 hours, 8AM-6PM weekdays
+    delivery: [text, email, reminder, file]
+    max_items: 20
+
+  news:
+    enabled: true
+    schedule:
+      cron: "0 7,17 * * *"  # 7 AM and 5 PM daily
+    delivery: [text, email, notification]
+    max_items: 8
+
+  grants:
+    enabled: true
+    schedule:
+      cron: "0 7 * * 1"  # Monday 7 AM
+    delivery: [text, email, file]
+    max_items: 10
