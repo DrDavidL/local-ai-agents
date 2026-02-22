@@ -40,6 +40,8 @@ uv run python scripts/telegram_bot.py
 |---------|-------------|
 | `/help` | Show available commands |
 | `/run <agent>` | Run an agent: `literature`, `email`, `news`, `grants`, `current`, `all` |
+| `/search research <query>` | Search PubMed + arXiv for a topic |
+| `/search news <query>` | Search Google News for a topic |
 | `/agents` | List available agents |
 | `/clear` | Clear conversation history |
 | `/model` | Show current LLM model |
@@ -48,13 +50,16 @@ uv run python scripts/telegram_bot.py
 
 **Natural language triggers** — the bot detects intent and runs agents automatically:
 
-| You say | Agent triggered |
-|---------|-----------------|
-| "Any new papers?" | Literature |
-| "Check my email" | Email Triage |
-| "What's in the news?" | News |
-| "Market update?" | Current Events |
-| "Any grants this week?" | Grants |
+| You say | What happens |
+|---------|--------------|
+| "Any new papers?" | Runs Literature agent |
+| "Check my email" | Runs Email Triage agent |
+| "What's in the news?" | Runs News agent |
+| "Market update?" | Runs Current Events agent |
+| "Any grants this week?" | Runs Grants agent |
+| "Research fisetin" | Ad-hoc PubMed + arXiv search |
+| "News - Russia" | Ad-hoc Google News search |
+| "Papers on longevity" | Ad-hoc PubMed + arXiv search |
 
 All other messages go to the LLM for regular conversation.
 

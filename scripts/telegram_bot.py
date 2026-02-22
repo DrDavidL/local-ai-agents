@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import quote_plus
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -202,19 +204,172 @@ def format_result(agent_key: str, result: dict | None) -> str:
     return "\n".join(lines)
 
 
+# ── Ad-hoc search ────────────────────────────────────────────────────
+
+# Patterns: "Research - fisetin", "papers on longevity", "News - Russia", etc.
+SEARCH_PATTERNS = [
+    # Dash/colon syntax: "Research - fisetin", "News: Russia"
+    (re.compile(r"^(?:research|papers?|literature|pubmed|arxiv)\s*[-:]\s*(.+)", re.I), "research"),
+    (re.compile(r"^(?:news|headlines)\s*[-:]\s*(.+)", re.I), "news"),
+    # Preposition syntax: "papers on fisetin", "research about longevity"
+    (re.compile(r"^(?:research|papers?|literature)\s+(?:on|about|for|regarding)\s+(.+)", re.I), "research"),
+    (re.compile(r"^(?:news|headlines)\s+(?:about|on|from|in|regarding)\s+(.+)", re.I), "news"),
+    # "look up fisetin"
+    (re.compile(r"^look\s*up\s+(.+)", re.I), "research"),
+]
+
+
+def detect_search_query(text: str) -> tuple[str, str] | None:
+    """Detect ad-hoc search intent. Returns (search_type, query) or None."""
+    for pattern, search_type in SEARCH_PATTERNS:
+        m = pattern.match(text.strip())
+        if m:
+            query = m.group(1).strip().rstrip("?.")
+            if len(query) >= 2:
+                return (search_type, query)
+    return None
+
+
+def ad_hoc_research(query: str, ollama_cfg: dict) -> str:
+    """Search PubMed + arXiv for a query, LLM-rank results, format for Telegram."""
+    from src.sources import pubmed, arxiv
+
+    pm_articles = pubmed.search_and_fetch(query, max_results=10)
+    arxiv_papers = arxiv.search(query, max_results=10)
+
+    if not pm_articles and not arxiv_papers:
+        return f"No research results found for: _{query}_"
+
+    # Build numbered content for LLM
+    numbered = []
+    for i, art in enumerate(pm_articles, 1):
+        numbered.append(
+            f"{i}. [PubMed] {art.title}\n"
+            f"   Authors: {art.authors}\n"
+            f"   Abstract: {art.abstract[:500]}"
+        )
+    offset = len(pm_articles)
+    for i, paper in enumerate(arxiv_papers, offset + 1):
+        numbered.append(
+            f"{i}. [arXiv] {paper.title}\n"
+            f"   Authors: {paper.authors}\n"
+            f"   Abstract: {paper.abstract[:500]}"
+        )
+    content = f"Query: {query}\n\n" + "\n\n".join(numbered)
+
+    system_prompt = (
+        "You are a research assistant. Given search results from PubMed and arXiv, "
+        "rank them by relevance to the query. Return JSON with:\n"
+        '{"summary": "1-2 sentence overview of findings", '
+        '"top_results": [{"item_number": N, "title": "...", '
+        '"one_liner": "why this is relevant", "relevance": "high/medium/low"}]}\n'
+        "Return at most 5 top results, most relevant first."
+    )
+
+    base_url = ollama_cfg.get("base_url", "http://localhost:11434/v1")
+    result = llm.structured_output(
+        system_prompt, content,
+        model=ollama_cfg.get("model", "gemma3"),
+        base_url=base_url,
+    )
+
+    # Format — merge LLM ranking with source data for URLs (never send URLs to LLM)
+    lines = [f"*Research: {query}*\n"]
+    all_sources = list(pm_articles) + list(arxiv_papers)
+
+    if result and result.get("summary"):
+        lines.append(result["summary"])
+
+    if result and result.get("top_results"):
+        for item in result["top_results"]:
+            idx = item.get("item_number", 0) - 1
+            if 0 <= idx < len(all_sources):
+                src = all_sources[idx]
+                rel = item.get("relevance", "")
+                tag = f" [{rel}]" if rel else ""
+                lines.append(f"\n{item.get('title', src.title)}{tag}")
+                if item.get("one_liner"):
+                    lines.append(f"  {item['one_liner']}")
+                lines.append(f"  {src.url}")
+    else:
+        for src in all_sources[:5]:
+            lines.append(f"\n{src.title}")
+            lines.append(f"  {src.url}")
+
+    return "\n".join(lines)
+
+
+def ad_hoc_news(query: str, ollama_cfg: dict) -> str:
+    """Search Google News RSS for a query, LLM-summarize, format for Telegram."""
+    from src.sources.rss import fetch_feed
+
+    encoded = quote_plus(query)
+    url = f"https://news.google.com/rss/search?q={encoded}&hl=en-US&gl=US&ceid=US:en"
+    items = fetch_feed(url, source_name="Google News", max_items=15)
+
+    if not items:
+        return f"No news results found for: _{query}_"
+
+    # Build numbered content for LLM
+    numbered = []
+    for i, item in enumerate(items, 1):
+        numbered.append(f"{i}. {item.title} ({item.source})")
+    content = f"Query: {query}\n\n" + "\n".join(numbered)
+
+    system_prompt = (
+        "You are a news analyst. Given news search results, summarize the key themes "
+        "and rank by importance. Return JSON with:\n"
+        '{"summary": "2-3 sentence briefing on the topic", '
+        '"top_items": [{"item_number": N, "one_liner": "why this is significant"}]}\n'
+        "Return at most 7 top items, most important first."
+    )
+
+    base_url = ollama_cfg.get("base_url", "http://localhost:11434/v1")
+    result = llm.structured_output(
+        system_prompt, content,
+        model=ollama_cfg.get("model", "gemma3"),
+        base_url=base_url,
+    )
+
+    # Format — merge LLM ranking with source data for URLs
+    lines = [f"*News: {query}*\n"]
+
+    if result and result.get("summary"):
+        lines.append(result["summary"])
+
+    if result and result.get("top_items"):
+        for ranked in result["top_items"]:
+            idx = ranked.get("item_number", 0) - 1
+            if 0 <= idx < len(items):
+                item = items[idx]
+                lines.append(f"\n{item.title}")
+                if ranked.get("one_liner"):
+                    lines.append(f"  {ranked['one_liner']}")
+                lines.append(f"  {item.url}")
+    else:
+        for item in items[:7]:
+            lines.append(f"\n{item.title}")
+            lines.append(f"  {item.url}")
+
+    return "\n".join(lines)
+
+
 # ── Telegram API helpers ──────────────────────────────────────────────
 
 HELP_TEXT = """*Available commands:*
 /help  — Show this message
 /clear — Clear conversation history
 /run <agent> — Run an agent (literature, email, news, grants, current, all)
+/search research <query> — Search PubMed + arXiv
+/search news <query> — Search Google News
 /agents — List available agents
 /id    — Show your Telegram chat ID
 /model — Show current LLM model
 /system <prompt> — Change the system prompt
 
 *Or just ask naturally:*
-"Any new papers?" "Check my email" "What's in the news?" "Market update?" "Any grants this week?\""""
+"Any new papers?" "Check my email" "What's in the news?"
+"Research fisetin" "News - Russia" "Papers on longevity\""""
 
 
 def tg_request(token: str, method: str, **kwargs) -> dict:
@@ -351,6 +506,29 @@ def handle_message(
                          f"Usage: `/run <agent>`\nAgents: {agent_names}, all")
             return
 
+        if cmd == "/search":
+            parts = text.split(maxsplit=2)
+            if len(parts) < 3:
+                send_message(token, chat_id,
+                             "Usage: `/search research <query>` or `/search news <query>`")
+                return
+            search_type = parts[1].lower()
+            query = parts[2].strip()
+            if search_type in ("research", "papers", "literature", "pubmed", "arxiv"):
+                send_message(token, chat_id, f"Searching research for _{query}_...")
+                send_typing(token, chat_id)
+                reply = ad_hoc_research(query, ollama_cfg)
+                send_message(token, chat_id, reply)
+            elif search_type in ("news", "headlines"):
+                send_message(token, chat_id, f"Searching news for _{query}_...")
+                send_typing(token, chat_id)
+                reply = ad_hoc_news(query, ollama_cfg)
+                send_message(token, chat_id, reply)
+            else:
+                send_message(token, chat_id,
+                             "Usage: `/search research <query>` or `/search news <query>`")
+            return
+
         if cmd == "/system":
             new_prompt = text[len("/system"):].strip()
             if new_prompt:
@@ -361,6 +539,21 @@ def handle_message(
                 current = custom_prompts.get(chat_id, base_system_prompt)
                 send_message(token, chat_id, f"Current system prompt:\n\n{current}")
             return
+
+    # ── Natural language search detection ─────────────────────────────
+    search = detect_search_query(text)
+    if search:
+        search_type, query = search
+        if search_type == "research":
+            send_message(token, chat_id, f"Searching research for _{query}_...")
+            send_typing(token, chat_id)
+            reply = ad_hoc_research(query, ollama_cfg)
+        else:
+            send_message(token, chat_id, f"Searching news for _{query}_...")
+            send_typing(token, chat_id)
+            reply = ad_hoc_news(query, ollama_cfg)
+        send_message(token, chat_id, reply)
+        return
 
     # ── Natural language agent detection ──────────────────────────────
     agent_key = detect_agent_intent(text)
