@@ -42,6 +42,8 @@ uv run python scripts/telegram_bot.py
 | `/run <agent>` | Run an agent: `literature`, `email`, `news`, `grants`, `current`, `all` |
 | `/search research <query>` | Search PubMed + arXiv for a topic |
 | `/search news <query>` | Search Google News for a topic |
+| `/med <drug>` | Look up a medication via FDA drug label |
+| `/med <drug> interactions` | Focus on a specific section (interactions, dosage, warnings, etc.) |
 | `/agents` | List available agents |
 | `/clear` | Clear conversation history |
 | `/model` | Show current LLM model |
@@ -59,7 +61,8 @@ uv run python scripts/telegram_bot.py
 | "Any grants this week?" | Runs Grants agent |
 | "Research fisetin" | Ad-hoc PubMed + arXiv search |
 | "News - Russia" | Ad-hoc Google News search |
-| "Papers on longevity" | Ad-hoc PubMed + arXiv search |
+| "What is metformin?" | FDA medication lookup |
+| "Lisinopril side effects" | Focused medication lookup |
 
 All other messages go to the LLM for regular conversation.
 
@@ -329,6 +332,7 @@ local-ai-agents/
 │       ├── gmail.py                # Mail.app AppleScript reader
 │       ├── nih_reporter.py         # NIH RePORTER API
 │       ├── grants_gov.py           # Grants.gov RSS
+│       ├── openfda.py              # FDA drug label API
 │       └── browser.py              # Playwright scraper (optional)
 ├── scripts/
 │   ├── run_agent.py                # CLI: run agents manually

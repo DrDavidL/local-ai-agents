@@ -218,6 +218,36 @@ SEARCH_PATTERNS = [
     (re.compile(r"^look\s*up\s+(.+)", re.I), "research"),
 ]
 
+# Medication lookup patterns
+MED_PATTERNS = [
+    # "med metformin", "medication lisinopril"
+    (re.compile(r"^(?:med|meds|medication|drug|rx)\s*[-:]\s*(.+)", re.I), None),
+    (re.compile(r"^(?:med|meds|medication|drug|rx)\s+(.+)", re.I), None),
+    # "metformin interactions", "lisinopril side effects", "ibuprofen dosage"
+    (re.compile(r"^(\w[\w\s-]*?)\s+(interactions?|side effects?|dosage|dosing|warnings?|contraindications?|overdose)$", re.I), "focus"),
+    # "what is metformin", "what is lisinopril used for"
+    (re.compile(r"^what\s+is\s+(\w[\w\s-]+?)(?:\s+used\s+for)?[?\s]*$", re.I), None),
+    # "side effects of metformin", "interactions for lisinopril"
+    (re.compile(r"^(?:side effects?|interactions?|dosage|warnings?|uses?)\s+(?:of|for)\s+(.+)", re.I), "focus_prefix"),
+]
+
+# Map focus keywords to relevant openFDA sections
+FOCUS_SECTIONS = {
+    "interaction": ["drug_interactions"],
+    "interactions": ["drug_interactions"],
+    "side effect": ["adverse_reactions"],
+    "side effects": ["adverse_reactions"],
+    "dosage": ["dosage_and_administration"],
+    "dosing": ["dosage_and_administration"],
+    "warning": ["warnings_and_cautions", "boxed_warning", "warnings"],
+    "warnings": ["warnings_and_cautions", "boxed_warning", "warnings"],
+    "contraindication": ["contraindications"],
+    "contraindications": ["contraindications"],
+    "overdose": ["overdosage"],
+    "use": ["indications_and_usage"],
+    "uses": ["indications_and_usage"],
+}
+
 
 def detect_search_query(text: str) -> tuple[str, str] | None:
     """Detect ad-hoc search intent. Returns (search_type, query) or None."""
@@ -354,6 +384,239 @@ def ad_hoc_news(query: str, ollama_cfg: dict) -> str:
     return "\n".join(lines)
 
 
+def detect_med_query(text: str) -> tuple[str, str | None] | None:
+    """Detect medication lookup intent. Returns (drug_name, focus_area) or None.
+
+    focus_area is None for general lookups, or a keyword like 'interactions'.
+    """
+    for pattern, mode in MED_PATTERNS:
+        m = pattern.match(text.strip())
+        if not m:
+            continue
+        if mode == "focus":
+            # Pattern: "metformin interactions" → groups: (drug, focus)
+            drug = m.group(1).strip()
+            focus = m.group(2).strip().lower()
+            if len(drug) >= 3:
+                return (drug, focus)
+        elif mode == "focus_prefix":
+            # Pattern: "side effects of metformin" → group 1 is the drug
+            drug = m.group(1).strip()
+            # Extract focus from the matched text prefix
+            prefix = text.strip().split()[0].lower()
+            focus_map = {"side": "side effects", "interaction": "interactions",
+                         "interactions": "interactions", "dosage": "dosage",
+                         "warning": "warnings", "warnings": "warnings",
+                         "use": "uses", "uses": "uses"}
+            focus = focus_map.get(prefix, None)
+            if len(drug) >= 3:
+                return (drug, focus)
+        else:
+            drug = m.group(1).strip().rstrip("?.!")
+            if len(drug) >= 3:
+                return (drug, None)
+    return None
+
+
+FDA_DISCLAIMER = "_Source: FDA drug labeling via openFDA. Not a substitute for professional medical advice._"
+
+# Section display order and character budgets for general queries.
+# (api_key, display_label, max_chars)
+RX_DISPLAY = [
+    ("indications_and_usage", "Indications", 400),
+    ("dosage_and_administration", "Dosing", 1000),
+    ("boxed_warning", "Boxed Warning", 400),
+    ("contraindications", "Contraindications", 300),
+    ("adverse_reactions", "Common Side Effects", 350),
+    ("drug_interactions", "Drug Interactions", 500),
+]
+
+OTC_DISPLAY = [
+    ("active_ingredient", "Active Ingredient", 200),
+    ("purpose", "Purpose", 100),
+    ("indications_and_usage", "Uses", 300),
+    ("dosage_and_administration", "Directions", 500),
+    ("warnings", "Warnings", 500),
+    ("do_not_use", "Do Not Use", 250),
+    ("stop_use", "Stop Use", 250),
+]
+
+
+# FDA section heading pattern — explicit names to avoid consuming drug names
+_FDA_HEADING_RE = re.compile(
+    r"^(?:\d+\s+)?(?:"
+    r"INDICATIONS\s+(?:AND|&)\s+USAGE"
+    r"|DOSAGE\s+(?:AND|&)\s+ADMINISTRATION"
+    r"|DOSAGE\s+FORMS\s+(?:AND|&)\s+STRENGTHS"
+    r"|CONTRAINDICATIONS?"
+    r"|WARNINGS?\s+AND\s+(?:PRECAUTIONS|CAUTIONS)"
+    r"|WARNINGS?"
+    r"|ADVERSE\s+REACTIONS?"
+    r"|DRUG\s+INTERACTIONS?"
+    r"|USE\s+IN\s+SPECIFIC\s+POPULATIONS?"
+    r"|OVERDOSAGE"
+    r"|CLINICAL\s+PHARMACOLOGY"
+    r"|MECHANISM\s+OF\s+ACTION"
+    r"|DESCRIPTION"
+    r")\s+",
+    re.I,
+)
+
+
+def _clean_fda_text(text: str) -> str:
+    """Clean FDA label text for Telegram display.
+
+    Strips section headings, internal cross-references, and normalizes whitespace.
+    The clinical content is preserved verbatim.
+    """
+    # Strip leading section number + known FDA heading (won't consume drug names)
+    text = _FDA_HEADING_RE.sub("", text)
+    # Strip "BOXED WARNING WARNING:" prefix
+    text = re.sub(r"^BOXED WARNING\s+(?:WARNING:\s*)?", "", text, flags=re.I)
+    # Strip OTC-style heading words that duplicate our display label
+    text = re.sub(r"^(?:Uses|Directions|Purpose|Warnings|Active ingredient[^)]*\))\s+", "", text, flags=re.I)
+    # Strip cross-reference brackets: [see ...] and [ see ... ]
+    text = re.sub(r"\s*\[\s*see [^\]]+\]", "", text)
+    # Strip inline section refs: ( 2.1 ) or ( 4 , 5.1 ) or (5.1)
+    text = re.sub(r"\s*\(\s*\d[\d.,\s]*\)", "", text)
+    # Strip subsection numbers like "2.1 Adult Dosage" (followed by uppercase = heading)
+    # but NOT dose values like "2.5 mg" (followed by lowercase = units)
+    text = re.sub(r"\s\d+\.\d+\s+(?=[A-Z])", " ", text)
+    # Normalize whitespace
+    text = re.sub(r"  +", " ", text)
+    return text.strip()
+
+
+_FDA_BREAK_RE = re.compile(
+    r"(?<=\.)\s+(?="
+    # Population / age subheadings
+    r"(?:Adults|Children|Pediatric Patients?|Neonates?|Geriatric Patients?|Infants?)"
+    r"|(?:For (?:the treatment|patients?|adults|children|pediatric|neonates?))"
+    # Organ impairment subheadings
+    r"|(?:(?:Renal|Hepatic|Hepatic and Renal)\s+Impairment)"
+    # Dose-adjustment subheadings
+    r"|(?:(?:Dosage|Dose)\s+(?:Adjustment|Modification|Reduction|for|in|and))"
+    # Administration / preparation
+    r"|(?:(?:Important|Administration|Preparation|Reconstitution|Directions))"
+    # Duration / switching
+    r"|(?:(?:Duration|Switching|Conversion|Maintenance|Maximum))"
+    # Table references
+    r"|(?:Table\s+\d+)"
+    r")",
+    re.I,
+)
+
+
+def _add_paragraph_breaks(text: str) -> str:
+    """Insert paragraph breaks before FDA inline subheadings."""
+    return _FDA_BREAK_RE.sub("\n\n", text)
+
+
+def _truncate(text: str, max_chars: int) -> str:
+    """Truncate text at a sentence boundary, or at max_chars with ellipsis."""
+    if len(text) <= max_chars:
+        return text
+    # Try to cut at last sentence boundary before max_chars
+    truncated = text[:max_chars]
+    last_period = truncated.rfind(". ")
+    if last_period > max_chars // 2:
+        return truncated[: last_period + 1]
+    return truncated.rstrip() + "..."
+
+
+def ad_hoc_medication(drug_name: str, focus: str | None) -> str:
+    """Look up a drug via openFDA and display FDA label text directly (no LLM)."""
+    from src.sources.openfda import search_drug_options
+
+    options = search_drug_options(drug_name)
+
+    if not options:
+        return f"No FDA drug label found for: _{drug_name}_"
+
+    # Show the first result (single-ingredient, sorted to top)
+    label = options[0]
+    result = _format_med_label(label, drug_name, focus)
+
+    # Mention other products if available
+    if len(options) > 1:
+        others = options[1:]
+        names = [o.brand_name or o.generic_name for o in others]
+        result += "\n\n_Also available:_ " + ", ".join(names)
+        result += f"\n_Use_ `/med <name>` _to look up a specific product._"
+
+    return result
+
+
+def _format_med_label(label, drug_name: str, focus: str | None) -> str:
+    """Format a single drug label for display."""
+    display_name = label.brand_name or label.generic_name or drug_name
+    if label.brand_name and label.generic_name:
+        display_name = f"{label.brand_name} ({label.generic_name.lower()})"
+
+    sections = label.sections
+    if not sections:
+        return f"FDA label found for _{display_name}_ but no content sections available."
+
+    is_otc = "purpose" in sections or "do_not_use" in sections
+
+    if focus:
+        return _format_med_focused(display_name, focus, sections)
+    elif is_otc:
+        return _format_med_display(display_name, sections, OTC_DISPLAY)
+    else:
+        return _format_med_display(display_name, sections, RX_DISPLAY)
+
+
+
+def _format_med_display(
+    display_name: str,
+    sections: dict[str, str],
+    display_plan: list[tuple[str, str, int]],
+) -> str:
+    """Format a general medication lookup using hardcoded layout and FDA text."""
+    lines = [f"*{display_name}*"]
+
+    for api_key, heading, budget in display_plan:
+        raw = sections.get(api_key, "")
+        if not raw:
+            continue
+        cleaned = _add_paragraph_breaks(_clean_fda_text(raw))
+        if not cleaned:
+            continue
+        text = _truncate(cleaned, budget)
+        lines.append(f"\n*{heading}*\n{text}")
+
+    lines.append(f"\n{FDA_DISCLAIMER}")
+    return "\n".join(lines)
+
+
+def _format_med_focused(
+    display_name: str,
+    focus: str,
+    sections: dict[str, str],
+) -> str:
+    """Format a focused medication lookup (e.g., just interactions)."""
+    relevant_keys = FOCUS_SECTIONS.get(focus, [])
+    heading = focus.replace("_", " ").title()
+
+    # Collect text from all matching sections
+    parts = []
+    for key in relevant_keys:
+        raw = sections.get(key, "")
+        if raw:
+            parts.append(_add_paragraph_breaks(_clean_fda_text(raw)))
+
+    if not parts:
+        return f"No _{heading.lower()}_ section found in the label for _{display_name}_."
+
+    combined = "\n\n".join(parts)
+    # Focused queries get a generous budget (most of Telegram's 4096 limit)
+    text = _truncate(combined, 3500)
+
+    lines = [f"*{display_name} — {heading}*\n", text, f"\n{FDA_DISCLAIMER}"]
+    return "\n".join(lines)
+
+
 # ── Telegram API helpers ──────────────────────────────────────────────
 
 HELP_TEXT = """*Available commands:*
@@ -362,6 +625,8 @@ HELP_TEXT = """*Available commands:*
 /run <agent> — Run an agent (literature, email, news, grants, current, all)
 /search research <query> — Search PubMed + arXiv
 /search news <query> — Search Google News
+/med <drug> — Look up a medication (FDA label)
+/med <drug> interactions — Focus on drug interactions
 /agents — List available agents
 /id    — Show your Telegram chat ID
 /model — Show current LLM model
@@ -369,7 +634,8 @@ HELP_TEXT = """*Available commands:*
 
 *Or just ask naturally:*
 "Any new papers?" "Check my email" "What's in the news?"
-"Research fisetin" "News - Russia" "Papers on longevity\""""
+"Research fisetin" "News - Russia" "Papers on longevity"
+"What is metformin?" "Lisinopril side effects\""""
 
 
 def tg_request(token: str, method: str, **kwargs) -> dict:
@@ -529,6 +795,25 @@ def handle_message(
                              "Usage: `/search research <query>` or `/search news <query>`")
             return
 
+        if cmd == "/med":
+            rest = text[len("/med"):].strip()
+            if not rest:
+                send_message(token, chat_id,
+                             "Usage: `/med <drug>` or `/med <drug> interactions`")
+                return
+            # Check for focus keyword at the end
+            focus = None
+            for kw in FOCUS_SECTIONS:
+                if rest.lower().endswith(f" {kw}"):
+                    focus = kw
+                    rest = rest[:-(len(kw) + 1)].strip()
+                    break
+            send_message(token, chat_id, f"Looking up _{rest}_...")
+            send_typing(token, chat_id)
+            reply = ad_hoc_medication(rest, focus)
+            send_message(token, chat_id, reply)
+            return
+
         if cmd == "/system":
             new_prompt = text[len("/system"):].strip()
             if new_prompt:
@@ -539,6 +824,16 @@ def handle_message(
                 current = custom_prompts.get(chat_id, base_system_prompt)
                 send_message(token, chat_id, f"Current system prompt:\n\n{current}")
             return
+
+    # ── Natural language medication detection ─────────────────────────
+    med = detect_med_query(text)
+    if med:
+        drug_name, focus = med
+        send_message(token, chat_id, f"Looking up _{drug_name}_...")
+        send_typing(token, chat_id)
+        reply = ad_hoc_medication(drug_name, focus)
+        send_message(token, chat_id, reply)
+        return
 
     # ── Natural language search detection ─────────────────────────────
     search = detect_search_query(text)
