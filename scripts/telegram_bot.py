@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Telegram bot: chat with your local Ollama from your phone."""
+"""Telegram bot: chat with your local Ollama from your phone.
+
+Also supports triggering agents via /run commands or natural language.
+"""
 
 from __future__ import annotations
 
@@ -13,11 +16,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 import httpx
-
 import yaml
 
 from src import llm
 from src.agents.base import load_config, CONFIG_DIR
+from src.agents.literature import LiteratureAgent
+from src.agents.email_triage import EmailTriageAgent
+from src.agents.news import NewsAgent
+from src.agents.grants import GrantsAgent
+from src.agents.current_events import CurrentEventsAgent
 
 load_dotenv()
 
@@ -51,15 +58,163 @@ def load_telegram_config() -> dict:
     with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
-HELP_TEXT = """Available commands:
-/help  — Show this message
-/clear — Clear conversation history
-/id    — Show your Telegram chat ID
-/model — Show current LLM model
-/system <prompt> — Change the system prompt for this session"""
+
+# ── Agent integration ─────────────────────────────────────────────────
+
+AGENT_CLASSES = {
+    "literature": LiteratureAgent,
+    "email": EmailTriageAgent,
+    "news": NewsAgent,
+    "grants": GrantsAgent,
+    "current": CurrentEventsAgent,
+}
+
+AGENT_LABELS = {
+    "literature": "Literature",
+    "email": "Email Triage",
+    "news": "News",
+    "grants": "Grants",
+    "current": "Current Events",
+}
+
+# (keywords, agent_key) — checked in order; multi-word phrases first
+AGENT_TRIGGERS = [
+    (["current events", "middle east", "israel", "chicago"], "current"),
+    (["paper", "papers", "literature", "pubmed", "arxiv", "research"], "literature"),
+    (["email", "emails", "inbox", "mail", "gmail"], "email"),
+    (["grant", "grants", "funding", "nih", "nsf"], "grants"),
+    (["market", "markets", "stock", "stocks", "finance"], "current"),
+    (["news", "headlines"], "news"),
+    (["briefing"], "current"),
+]
+
+INTENT_SIGNALS = [
+    "check", "run", "any", "what", "show", "get", "how",
+    "new", "update", "latest", "recent", "?",
+]
+
+
+def detect_agent_intent(text: str) -> str | None:
+    """Detect if the user wants to trigger an agent from natural language."""
+    text_lower = text.lower()
+
+    # Require an intent signal to avoid false positives
+    if not any(signal in text_lower for signal in INTENT_SIGNALS):
+        return None
+
+    for keywords, agent_key in AGENT_TRIGGERS:
+        for kw in keywords:
+            if kw in text_lower:
+                return agent_key
+    return None
+
+
+def run_agent_for_chat(agent_key: str, config: dict) -> dict | None:
+    """Run an agent in dry-run mode and return its result."""
+    agent_class = AGENT_CLASSES.get(agent_key)
+    if not agent_class:
+        return None
+    agent = agent_class(config=config, dry_run=True)
+    return agent.run()
+
+
+def format_result(agent_key: str, result: dict | None) -> str:
+    """Format an agent result into a Telegram-friendly message."""
+    label = AGENT_LABELS.get(agent_key, agent_key)
+
+    if result is None:
+        return f"*{label}*: No new items found."
+
+    lines: list[str] = []
+
+    if agent_key == "literature":
+        papers = result.get("papers", [])
+        lines.append(f"*{label}* — {len(papers)} papers\n")
+        lines.append(result.get("summary", ""))
+        for p in papers:
+            rel = p.get("clinical_relevance", "")
+            rel_tag = f" [{rel}]" if rel else ""
+            lines.append(f"\n{p['title']}{rel_tag}")
+            if p.get("one_liner"):
+                lines.append(f"  {p['one_liner']}")
+            lines.append(f"  {p['url']}")
+
+    elif agent_key == "news":
+        items = result.get("items", [])
+        lines.append(f"*{label}* — {len(items)} items\n")
+        lines.append(result.get("headline_summary", ""))
+        for item in items:
+            cat = f" [{item.get('category', '')}]" if item.get("category") else ""
+            lines.append(f"\n{item['title']}{cat}")
+            if item.get("one_liner"):
+                lines.append(f"  {item['one_liner']}")
+            lines.append(f"  {item['url']}")
+
+    elif agent_key == "email":
+        items = result.get("items", [])
+        urgent = result.get("urgent_count", 0)
+        lines.append(f"*{label}* — {len(items)} emails, {urgent} urgent\n")
+        lines.append(result.get("summary", ""))
+        for item in items:
+            priority = item.get("priority", "")
+            icon = {"urgent": "!!", "action-needed": "!", "fyi": ""}.get(priority, "")
+            lines.append(f"\n{icon} {item.get('subject', '')} (from {item.get('from', '')})")
+            if item.get("one_liner"):
+                lines.append(f"  {item['one_liner']}")
+            if item.get("next_action"):
+                lines.append(f"  Action: {item['next_action']}")
+
+    elif agent_key == "grants":
+        opps = result.get("opportunities", [])
+        lines.append(f"*{label}* — {len(opps)} opportunities\n")
+        lines.append(result.get("summary", ""))
+        for opp in opps:
+            rel = f" [{opp.get('relevance', '')}]" if opp.get("relevance") else ""
+            lines.append(f"\n{opp['title']}{rel}")
+            if opp.get("one_liner"):
+                lines.append(f"  {opp['one_liner']}")
+            if opp.get("deadline"):
+                lines.append(f"  Deadline: {opp['deadline']}")
+            lines.append(f"  {opp['url']}")
+
+    elif agent_key == "current":
+        items = result.get("items", [])
+        lines.append(f"*{label}* — {len(items)} items\n")
+        lines.append(result.get("briefing", ""))
+        # Group by topic
+        by_topic: dict[str, list] = {}
+        for item in items:
+            topic = item.get("topic", "other")
+            by_topic.setdefault(topic, []).append(item)
+        for topic, topic_items in by_topic.items():
+            lines.append(f"\n_{topic}_")
+            for item in topic_items:
+                imp = item.get("importance", "")
+                tag = f" [{imp}]" if imp else ""
+                lines.append(f"  {item['title']}{tag}")
+                if item.get("one_liner"):
+                    lines.append(f"    {item['one_liner']}")
+                lines.append(f"    {item['url']}")
+
+    else:
+        lines.append(f"*{label}* completed.")
+
+    return "\n".join(lines)
 
 
 # ── Telegram API helpers ──────────────────────────────────────────────
+
+HELP_TEXT = """*Available commands:*
+/help  — Show this message
+/clear — Clear conversation history
+/run <agent> — Run an agent (literature, email, news, grants, current, all)
+/agents — List available agents
+/id    — Show your Telegram chat ID
+/model — Show current LLM model
+/system <prompt> — Change the system prompt
+
+*Or just ask naturally:*
+"Any new papers?" "Check my email" "What's in the news?" "Market update?" "Any grants this week?\""""
 
 
 def tg_request(token: str, method: str, **kwargs) -> dict:
@@ -98,10 +253,32 @@ def send_typing(token: str, chat_id: int) -> None:
 # ── Message handling ──────────────────────────────────────────────────
 
 
+def handle_agent_run(
+    token: str,
+    chat_id: int,
+    agent_key: str,
+    config: dict,
+) -> None:
+    """Run an agent and send the result via Telegram."""
+    label = AGENT_LABELS.get(agent_key, agent_key)
+    send_message(token, chat_id, f"Running {label} agent...")
+    send_typing(token, chat_id)
+
+    try:
+        result = run_agent_for_chat(agent_key, config)
+        reply = format_result(agent_key, result)
+    except Exception as exc:
+        logger.error("Agent '%s' failed: %s", agent_key, exc)
+        reply = f"Agent {label} failed: {exc}"
+
+    send_message(token, chat_id, reply)
+
+
 def handle_message(
     token: str,
     chat_id: int,
     text: str,
+    config: dict,
     ollama_cfg: dict,
     tg_cfg: dict,
     allowed_ids: set[int],
@@ -122,9 +299,10 @@ def handle_message(
                      "Add it to TELEGRAM\\_ALLOWED\\_CHAT\\_IDS in .env.")
         return
 
-    # Commands
+    # ── Slash commands ────────────────────────────────────────────────
     if text.startswith("/"):
-        cmd = text.split()[0].lower().split("@")[0]  # strip @botname suffix
+        cmd_parts = text.split()
+        cmd = cmd_parts[0].lower().split("@")[0]  # strip @botname suffix
 
         if cmd == "/start":
             send_message(token, chat_id,
@@ -150,6 +328,29 @@ def handle_message(
             send_message(token, chat_id, f"Model: `{ollama_cfg.get('model', 'unknown')}`")
             return
 
+        if cmd == "/agents":
+            agent_list = "\n".join(
+                f"  `{key}` — {label}" for key, label in AGENT_LABELS.items()
+            )
+            send_message(token, chat_id,
+                         f"*Available agents:*\n{agent_list}\n\n"
+                         "Use `/run <agent>` or `/run all`")
+            return
+
+        if cmd == "/run":
+            arg = cmd_parts[1].lower() if len(cmd_parts) > 1 else ""
+            if arg == "all":
+                for key in AGENT_CLASSES:
+                    handle_agent_run(token, chat_id, key, config)
+                return
+            if arg in AGENT_CLASSES:
+                handle_agent_run(token, chat_id, arg, config)
+                return
+            agent_names = ", ".join(AGENT_CLASSES.keys())
+            send_message(token, chat_id,
+                         f"Usage: `/run <agent>`\nAgents: {agent_names}, all")
+            return
+
         if cmd == "/system":
             new_prompt = text[len("/system"):].strip()
             if new_prompt:
@@ -161,7 +362,13 @@ def handle_message(
                 send_message(token, chat_id, f"Current system prompt:\n\n{current}")
             return
 
-    # Regular chat message
+    # ── Natural language agent detection ──────────────────────────────
+    agent_key = detect_agent_intent(text)
+    if agent_key:
+        handle_agent_run(token, chat_id, agent_key, config)
+        return
+
+    # ── Regular chat with LLM ─────────────────────────────────────────
     send_typing(token, chat_id)
 
     conversations[chat_id].append({"role": "user", "content": text})
@@ -175,7 +382,7 @@ def handle_message(
     ollama_root = base_url.replace("/v1", "")
     if not llm.health_check(ollama_root):
         send_message(token, chat_id, "Ollama is not running. Start it and try again.")
-        conversations[chat_id].pop()  # remove the unanswered message
+        conversations[chat_id].pop()
         return
 
     sys_prompt = custom_prompts.get(chat_id, base_system_prompt)
@@ -195,7 +402,7 @@ def handle_message(
         send_message(token, chat_id, response)
     else:
         send_message(token, chat_id, "Sorry, I couldn't generate a response.")
-        conversations[chat_id].pop()  # remove the unanswered user message
+        conversations[chat_id].pop()
 
 
 # ── Main loop ─────────────────────────────────────────────────────────
@@ -235,10 +442,11 @@ def main() -> None:
     # Verify Telegram token
     me = tg_request(token, "getMe")
     if not me.get("ok"):
-        logger.error("Invalid Telegram token: %s", me)
+        logger.error("Invalid Telegram token")
         sys.exit(1)
     bot_name = me["result"]["username"]
     logger.info("Bot started: @%s (model: %s)", bot_name, ollama_cfg.get("model"))
+    logger.info("Agents available: %s", ", ".join(AGENT_CLASSES.keys()))
 
     offset: int | None = None
     while True:
@@ -259,8 +467,8 @@ def main() -> None:
                 text = msg.get("text", "")
                 if chat_id and text:
                     logger.info("chat_id=%d: %s", chat_id, text[:80])
-                    handle_message(token, chat_id, text, ollama_cfg, tg_cfg,
-                                   allowed_ids, base_system_prompt,
+                    handle_message(token, chat_id, text, config, ollama_cfg,
+                                   tg_cfg, allowed_ids, base_system_prompt,
                                    custom_prompts)
         except httpx.TimeoutException:
             continue  # normal for long polling
