@@ -13,6 +13,7 @@ Usage:
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -54,6 +55,8 @@ def main() -> None:
         context.storage_state(path=str(AUTH_STATE_FILE))
         browser.close()
 
+    # Restrict permissions — contains session cookies
+    os.chmod(AUTH_STATE_FILE, 0o600)
     print(f"\nAuth state saved to: {AUTH_STATE_FILE}")
     print("You can now enable paywalled sources in config/feeds.yaml")
 

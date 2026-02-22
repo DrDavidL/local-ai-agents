@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 from typing import Any
@@ -134,16 +135,16 @@ class NewsAgent(BaseAgent):
 
             rows += f"""
             <tr>
-                <td style="color:{category_color};font-weight:bold;">{item.get('category', '')}</td>
-                <td><a href="{item['url']}">{item['title']}</a></td>
-                <td>{item['source']}</td>
-                <td>{item.get('one_liner', '')}</td>
-                <td>{item.get('relevance', '')}</td>
+                <td style="color:{category_color};font-weight:bold;">{html.escape(item.get('category', ''))}</td>
+                <td><a href="{html.escape(item['url'], quote=True)}">{html.escape(item['title'])}</a></td>
+                <td>{html.escape(item['source'])}</td>
+                <td>{html.escape(item.get('one_liner', ''))}</td>
+                <td>{html.escape(item.get('relevance', ''))}</td>
             </tr>"""
 
         return f"""<html><body>
         <h2>News Digest - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>
-        <p>{result.get('headline_summary', '')}</p>
+        <p>{html.escape(result.get('headline_summary', ''))}</p>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
         <tr><th>Category</th><th>Title</th><th>Source</th><th>Summary</th><th>Relevance</th></tr>
         {rows}

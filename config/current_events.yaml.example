@@ -14,8 +14,8 @@ topics:
     color: "#cc3300"
     item_hint: "3-4 items (focus on major developments)"
     feeds:
-      - name: "AP News"
-        url: "https://rsshub.app/apnews/topics/apf-topnews"
+      - name: "BBC World"
+        url: "https://feeds.bbci.co.uk/news/world/rss.xml"
       - name: "NYT World"
         url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
 

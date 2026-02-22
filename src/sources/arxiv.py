@@ -55,12 +55,13 @@ def search(
 def _parse_atom(xml_text: str) -> list[ArxivPaper]:
     """Parse arXiv Atom XML response."""
     import xml.etree.ElementTree as ET
+    from defusedxml.ElementTree import fromstring as safe_fromstring
 
     ns = {"atom": "http://www.w3.org/2005/Atom", "arxiv": "http://arxiv.org/schemas/atom"}
     papers = []
 
     try:
-        root = ET.fromstring(xml_text)
+        root = safe_fromstring(xml_text)
     except ET.ParseError as exc:
         logger.error("arXiv XML parse error: %s", exc)
         return []

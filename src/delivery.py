@@ -62,7 +62,12 @@ def save_draft(filename: str, content: str) -> Path | None:
     """Save to data/drafts/. Returns the file path or None on failure."""
     try:
         DRAFTS_DIR.mkdir(parents=True, exist_ok=True)
-        path = DRAFTS_DIR / filename
+        # Sanitize filename to prevent path traversal
+        safe_name = Path(filename).name
+        if not safe_name:
+            logger.error("Invalid draft filename: %s", filename)
+            return None
+        path = DRAFTS_DIR / safe_name
         path.write_text(content, encoding="utf-8")
         logger.info("Draft saved: %s", path)
         return path

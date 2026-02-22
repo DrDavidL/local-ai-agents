@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 from typing import Any
@@ -154,18 +155,18 @@ class EmailTriageAgent(BaseAgent):
 
             rows += f"""
             <tr>
-                <td style="color:{priority_color};font-weight:bold;">{item.get('priority', '')}</td>
-                <td>{item['from']}</td>
-                <td>{item['subject']}</td>
-                <td>{item.get('category', '')}</td>
-                <td>{item.get('one_liner', '')}</td>
-                <td>{item.get('next_action', '')}</td>
-                <td><em>{item.get('draft_reply', '')}</em></td>
+                <td style="color:{priority_color};font-weight:bold;">{html.escape(item.get('priority', ''))}</td>
+                <td>{html.escape(item['from'])}</td>
+                <td>{html.escape(item['subject'])}</td>
+                <td>{html.escape(item.get('category', ''))}</td>
+                <td>{html.escape(item.get('one_liner', ''))}</td>
+                <td>{html.escape(item.get('next_action', ''))}</td>
+                <td><em>{html.escape(item.get('draft_reply', ''))}</em></td>
             </tr>"""
 
         return f"""<html><body>
         <h2>Email Triage - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>
-        <p>{result.get('summary', '')}</p>
+        <p>{html.escape(result.get('summary', ''))}</p>
         <p><strong>Urgent items:</strong> {result.get('urgent_count', 0)}</p>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
         <tr><th>Priority</th><th>From</th><th>Subject</th><th>Category</th>

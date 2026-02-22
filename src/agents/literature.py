@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 from typing import Any
@@ -172,20 +173,21 @@ class LiteratureAgent(BaseAgent):
         papers = result.get("papers", [])
         rows = ""
         for p in papers:
-            tags = ", ".join(p.get("tags", [])) if isinstance(p.get("tags"), list) else p.get("tags", "")
+            tags_raw = p.get("tags", [])
+            tags = ", ".join(tags_raw) if isinstance(tags_raw, list) else str(tags_raw)
             rows += f"""
             <tr>
-                <td><a href="{p['url']}">{p['title']}</a></td>
-                <td>{p['authors']}</td>
-                <td>{p['source']}</td>
-                <td>{p.get('one_liner', '')}</td>
-                <td>{p.get('clinical_relevance', '')}</td>
-                <td>{tags}</td>
+                <td><a href="{html.escape(p['url'], quote=True)}">{html.escape(p['title'])}</a></td>
+                <td>{html.escape(p['authors'])}</td>
+                <td>{html.escape(p['source'])}</td>
+                <td>{html.escape(p.get('one_liner', ''))}</td>
+                <td>{html.escape(p.get('clinical_relevance', ''))}</td>
+                <td>{html.escape(tags)}</td>
             </tr>"""
 
         return f"""<html><body>
         <h2>Literature Digest - {datetime.now().strftime('%Y-%m-%d')}</h2>
-        <p>{result.get('summary', '')}</p>
+        <p>{html.escape(result.get('summary', ''))}</p>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
         <tr><th>Title</th><th>Authors</th><th>Source</th><th>Summary</th><th>Relevance</th><th>Tags</th></tr>
         {rows}

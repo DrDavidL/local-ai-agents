@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html
 import logging
 from datetime import datetime
 from typing import Any
@@ -174,19 +175,19 @@ class GrantsAgent(BaseAgent):
 
             rows += f"""
             <tr>
-                <td style="color:{rel_color};font-weight:bold;">{opp.get('relevance', '')}</td>
-                <td><a href="{opp['url']}">{opp['title']}</a></td>
-                <td>{opp['foa_number']}</td>
-                <td>{opp['agency']}</td>
-                <td>{opp['funding_range']}</td>
-                <td>{opp['deadline']}</td>
-                <td>{opp.get('one_liner', '')}</td>
-                <td><em>{opp.get('fit_assessment', '')}</em></td>
+                <td style="color:{rel_color};font-weight:bold;">{html.escape(opp.get('relevance', ''))}</td>
+                <td><a href="{html.escape(opp['url'], quote=True)}">{html.escape(opp['title'])}</a></td>
+                <td>{html.escape(opp['foa_number'])}</td>
+                <td>{html.escape(opp['agency'])}</td>
+                <td>{html.escape(opp['funding_range'])}</td>
+                <td>{html.escape(opp['deadline'])}</td>
+                <td>{html.escape(opp.get('one_liner', ''))}</td>
+                <td><em>{html.escape(opp.get('fit_assessment', ''))}</em></td>
             </tr>"""
 
         return f"""<html><body>
         <h2>Grant Opportunities - {datetime.now().strftime('%Y-%m-%d')}</h2>
-        <p>{result.get('summary', '')}</p>
+        <p>{html.escape(result.get('summary', ''))}</p>
         <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;">
         <tr><th>Relevance</th><th>Title</th><th>FOA</th><th>Agency</th>
         <th>Funding</th><th>Deadline</th><th>Summary</th><th>Fit</th></tr>

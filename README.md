@@ -235,6 +235,34 @@ Copy `.env.example` to `.env` and fill in your values:
 | `TWILIO_FROM_NUMBER` | No | Twilio fallback SMS |
 | `TWILIO_TO_NUMBER` | No | Twilio fallback SMS |
 
+## Security
+
+### Implemented safeguards
+
+- **Fail-closed Telegram auth** -- the bot rejects all messages unless `TELEGRAM_ALLOWED_CHAT_IDS` is configured. Only `/id` works unauthenticated (for initial setup).
+- **HTML escaping** -- all agent email digests escape RSS titles, URLs, and LLM output via `html.escape()` to prevent XSS injection through crafted feed content.
+- **Safe XML parsing** -- PubMed and arXiv responses are parsed with `defusedxml` to prevent XML entity expansion attacks (billion laughs DoS).
+- **Path traversal protection** -- `save_draft()` sanitizes filenames via `Path.name` to prevent `../` directory escape.
+- **No token logging** -- httpx request logging is suppressed in the Telegram bot to prevent bot tokens from appearing in log files.
+- **Restricted file permissions** -- `.env`, `data/`, and `browser_auth.json` are set to owner-only access (600/700).
+- **Atomic history writes** -- `history.json` is written to a temp file and renamed to prevent corruption.
+- **LLM/URL separation** -- URLs are never sent to the LLM; agents merge LLM analysis with source data to prevent URL hallucination.
+
+### Post-install hardening
+
+After cloning and configuring, restrict file permissions:
+
+```bash
+chmod 600 .env
+chmod 700 data/
+```
+
+### Known limitations
+
+- **Shortcuts Bridge uses HTTP** -- the auth token is sent over plain HTTP, which is acceptable for localhost-only traffic but not suitable if the bridge runs on a remote host.
+- **No file locking on history.json** -- concurrent agent runs could race on read-modify-write. Mitigated by APScheduler running jobs sequentially by default.
+- **RSS content in LLM prompts** -- crafted RSS titles could attempt prompt injection. Mitigated by using a local LLM (no exfiltration path) and the numbered-item pattern that separates LLM analysis from source data.
+
 ## Deduplication
 
 Agents track previously seen items in `data/history.json` to avoid sending duplicate summaries. Each agent maintains its own ID list (PubMed PMIDs, arXiv IDs, DOIs, FOA numbers, etc.), capped at 5,000 entries.

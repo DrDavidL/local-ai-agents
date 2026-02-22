@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_mod
 import logging
 from datetime import datetime
 from typing import Any
@@ -211,14 +212,14 @@ class CurrentEventsAgent(BaseAgent):
                 }.get(item.get("importance", ""), "#333333")
                 rows += f"""
                 <tr>
-                    <td style="color:{imp_color};font-weight:bold;">{item.get('importance', '')}</td>
-                    <td><a href="{item['url']}">{item['title']}</a></td>
-                    <td>{item['source']}</td>
-                    <td>{item.get('one_liner', '')}</td>
+                    <td style="color:{imp_color};font-weight:bold;">{html_mod.escape(item.get('importance', ''))}</td>
+                    <td><a href="{html_mod.escape(item['url'], quote=True)}">{html_mod.escape(item['title'])}</a></td>
+                    <td>{html_mod.escape(item['source'])}</td>
+                    <td>{html_mod.escape(item.get('one_liner', ''))}</td>
                 </tr>"""
 
             sections_html += f"""
-            <h3 style="color:{color};margin-top:20px;">{label}</h3>
+            <h3 style="color:{color};margin-top:20px;">{html_mod.escape(label)}</h3>
             <table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse;width:100%;">
             <tr><th>Importance</th><th>Title</th><th>Source</th><th>Summary</th></tr>
             {rows}
@@ -231,10 +232,10 @@ class CurrentEventsAgent(BaseAgent):
             for item in other_items:
                 rows += f"""
                 <tr>
-                    <td>{item.get('importance', '')}</td>
-                    <td><a href="{item['url']}">{item['title']}</a></td>
-                    <td>{item['source']}</td>
-                    <td>{item.get('one_liner', '')}</td>
+                    <td>{html_mod.escape(item.get('importance', ''))}</td>
+                    <td><a href="{html_mod.escape(item['url'], quote=True)}">{html_mod.escape(item['title'])}</a></td>
+                    <td>{html_mod.escape(item['source'])}</td>
+                    <td>{html_mod.escape(item.get('one_liner', ''))}</td>
                 </tr>"""
             sections_html += f"""
             <h3 style="margin-top:20px;">Other</h3>
@@ -246,6 +247,6 @@ class CurrentEventsAgent(BaseAgent):
         return f"""<html><body>
         <h2>Current Events Briefing - {datetime.now().strftime('%Y-%m-%d %H:%M')}</h2>
         <p style="font-size:16px;background:#f5f5f5;padding:12px;border-radius:6px;">
-        {result.get('briefing', '')}</p>
+        {html_mod.escape(result.get('briefing', ''))}</p>
         {sections_html}
         </body></html>"""

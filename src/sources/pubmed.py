@@ -100,10 +100,11 @@ def fetch_details(pmids: list[str]) -> list[PubMedArticle]:
 def _parse_xml(xml_text: str) -> list[PubMedArticle]:
     """Parse PubMed XML response into article objects."""
     import xml.etree.ElementTree as ET
+    from defusedxml.ElementTree import fromstring as safe_fromstring
 
     articles = []
     try:
-        root = ET.fromstring(xml_text)
+        root = safe_fromstring(xml_text)
     except ET.ParseError as exc:
         logger.error("PubMed XML parse error: %s", exc)
         return []

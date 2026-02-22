@@ -28,6 +28,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Suppress httpx request logging — it includes the bot token in URLs
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 TELEGRAM_API = "https://api.telegram.org/bot{token}"
 MAX_MSG_LEN = 4096  # Telegram's per-message character limit
 
@@ -108,9 +111,12 @@ def handle_message(
     """Process an incoming message."""
     max_history = tg_cfg.get("max_history", 20)
 
-    # Auth check
-    if allowed_ids and chat_id not in allowed_ids:
-        logger.warning("Unauthorized chat_id=%d tried to message", chat_id)
+    # Auth check (fail-closed: /id always works for setup, everything else requires allowlist)
+    if chat_id not in allowed_ids:
+        if text.strip().startswith("/id"):
+            send_message(token, chat_id, f"Your chat ID: `{chat_id}`")
+            return
+        logger.warning("Unauthorized chat_id=%d", chat_id)
         send_message(token, chat_id,
                      f"Unauthorized. Your chat ID is `{chat_id}`. "
                      "Add it to TELEGRAM\\_ALLOWED\\_CHAT\\_IDS in .env.")
@@ -211,14 +217,17 @@ def main() -> None:
     base_system_prompt = tg_personal.get("system_prompt", DEFAULT_SYSTEM_PROMPT)
     logger.info("System prompt loaded (%d chars)", len(base_system_prompt))
 
-    # Parse allowed chat IDs
+    # Parse allowed chat IDs (fail-closed: refuse all if not configured)
     allowed_str = os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS", "")
     allowed_ids: set[int] = set()
     if allowed_str.strip():
         allowed_ids = {int(x.strip()) for x in allowed_str.split(",") if x.strip()}
         logger.info("Restricted to chat IDs: %s", allowed_ids)
     else:
-        logger.warning("TELEGRAM_ALLOWED_CHAT_IDS not set — bot is open to anyone!")
+        logger.error(
+            "TELEGRAM_ALLOWED_CHAT_IDS not set. Bot will reject all messages. "
+            "Send /id to the bot, then add your chat ID to .env."
+        )
 
     # Per-chat custom system prompts (in-memory, overridden via /system command)
     custom_prompts: dict[int, str] = {}
@@ -236,9 +245,17 @@ def main() -> None:
         try:
             updates = get_updates(token, offset)
             for update in updates:
-                offset = update["update_id"] + 1
-                msg = update.get("message", {})
-                chat_id = msg.get("chat", {}).get("id")
+                update_id = update.get("update_id")
+                if update_id is None:
+                    continue
+                offset = update_id + 1
+                msg = update.get("message")
+                if not isinstance(msg, dict):
+                    continue
+                chat = msg.get("chat")
+                if not isinstance(chat, dict):
+                    continue
+                chat_id = chat.get("id")
                 text = msg.get("text", "")
                 if chat_id and text:
                     logger.info("chat_id=%d: %s", chat_id, text[:80])

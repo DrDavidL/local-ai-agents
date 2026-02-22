@@ -10,6 +10,7 @@ dependencies = [
     "httpx",
     "feedparser",
     "apscheduler>=3.10,<4",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]
