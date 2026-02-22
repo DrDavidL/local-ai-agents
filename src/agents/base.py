@@ -41,6 +41,13 @@ def load_grants_config() -> dict:
         return yaml.safe_load(f)
 
 
+def load_current_events_config() -> dict:
+    """Load current_events.yaml config."""
+    config_path = CONFIG_DIR / "current_events.yaml"
+    with open(config_path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
 class HistoryStore:
     """Deduplication history with file locking."""
 

@@ -1,6 +1,6 @@
 # Local AI Agents
 
-Scheduled AI agents running on a Mac, powered by **Ollama** (local LLM inference). Four agents monitor different information streams — literature, email, news, and grants — produce concise summaries, and deliver them via text message, email, and macOS notifications.
+Scheduled AI agents and a Telegram chatbot running on a Mac, powered by **Ollama** (local LLM inference). Five agents monitor different information streams — literature, email, news, grants, and current events — produce concise summaries, and deliver them via text message, email, and macOS notifications. A Telegram bot provides mobile chat access to your local LLM.
 
 All inference stays local. No cloud LLM API keys required.
 
@@ -12,21 +12,46 @@ All inference stays local. No cloud LLM API keys required.
 | **Email Triage** | Monitors a Gmail label, prioritizes emails, drafts replies | Every 2h, business hours | Gmail via Mail.app |
 | **News** | Surfaces relevant healthcare AI and informatics news | 7 AM and 5 PM daily | RSS feeds (configurable) |
 | **Grants** | Scans for NIH/NSF/federal funding opportunities | Mondays 7 AM | NIH RePORTER, Grants.gov |
+| **Current Events** | Configurable news topics (e.g. world, local, markets, tech) | 7 AM, noon, 6 PM | RSS feeds (configurable) |
+
+## Telegram Bot
+
+Chat with your local Ollama from your phone via Telegram. Supports multi-turn conversations, configurable system prompt, and typing indicators.
+
+```bash
+# Set up (one-time)
+# 1. Message @BotFather on Telegram, send /newbot, copy the token
+# 2. Add to .env:
+#    TELEGRAM_BOT_TOKEN=your-token-here
+#    TELEGRAM_ALLOWED_CHAT_IDS=your-chat-id
+
+# 3. Copy and customize the system prompt
+cp config/telegram.yaml.example config/telegram.yaml
+
+# Run manually
+uv run python scripts/telegram_bot.py
+
+# Or install as a LaunchAgent (see Persistent Scheduling below)
+```
+
+**Bot commands:** `/help`, `/clear`, `/id`, `/model`, `/system <prompt>`
 
 ## Architecture
 
 ```
 Ollama (localhost:11434)
   ↕ OpenAI-compatible API
-Agents: literature │ email_triage │ news │ grants
-  ↓                        ↓
-Data Sources            LLM Summarization
-(PubMed, arXiv,             ↓
- RSS, Gmail,           Delivery
- NIH RePORTER)         ├─ Text (macOS Shortcuts Bridge)
-                       ├─ Email (Gmail SMTP)
-                       ├─ Notifications (macOS)
-                       └─ File drafts (HTML/text)
+  ├─ Agents: literature │ email_triage │ news │ grants │ current_events
+  │    ↓                        ↓
+  │  Data Sources            LLM Summarization
+  │  (PubMed, arXiv,             ↓
+  │   RSS, Gmail,           Delivery
+  │   NIH RePORTER)         ├─ Text (macOS Shortcuts Bridge)
+  │                         ├─ Email (Gmail SMTP)
+  │                         ├─ Notifications (macOS)
+  │                         └─ File drafts (HTML/text)
+  │
+  └─ Telegram Bot ←→ Phone (long polling, no port forwarding needed)
 ```
 
 ## Prerequisites
@@ -56,6 +81,24 @@ uv run python scripts/run_agent.py literature --dry-run
 
 # Run all agents in dry-run mode
 uv run python scripts/run_agent.py all --dry-run
+
+# Run current events agent
+uv run python scripts/run_agent.py current --dry-run
+```
+
+### Optional: Paywalled site access (WSJ, NYT)
+
+If you have subscriptions to WSJ or NYT and want full-article extraction:
+
+```bash
+# Install Playwright
+uv sync --extra scraping
+playwright install chromium
+
+# One-time: log into your subscriptions in the browser that opens
+uv run python scripts/save_browser_auth.py
+
+# Enable paywalled sources in config/current_events.yaml (set enabled: true)
 ```
 
 ## Configuration
@@ -67,6 +110,28 @@ All configuration lives in `config/`:
 | `config/agents.yaml` | Master config: LLM model, schedules, delivery methods per agent |
 | `config/feeds.yaml` | RSS feed URLs and PubMed search terms |
 | `config/grant_sources.yaml` | NIH activity codes, keywords, grant search parameters |
+| `config/current_events.yaml` | Personal current events topics and feeds (gitignored) |
+| `config/current_events.yaml.example` | Template for current events config |
+| `config/telegram.yaml` | Personal Telegram bot system prompt (gitignored) |
+| `config/telegram.yaml.example` | Template for Telegram bot config |
+
+### Current events topics
+
+Copy the example and customize your topics:
+
+```bash
+cp config/current_events.yaml.example config/current_events.yaml
+# Edit with your preferred topics, feeds, and colors
+```
+
+Each topic needs a key, label, color, item_hint, and a list of RSS feeds. See the example file for the full format.
+
+### Telegram bot system prompt
+
+```bash
+cp config/telegram.yaml.example config/telegram.yaml
+# Customize the system prompt for your bot's persona
+```
 
 ### Changing the LLM model
 
@@ -102,28 +167,47 @@ Agents deliver results through multiple channels (configurable per agent):
 
 | Method | How | Fallback |
 |--------|-----|----------|
-| **Text** | macOS Shortcuts Bridge (`TextDavid` shortcut) | Twilio SMS |
+| **Text** | macOS Shortcuts Bridge (configurable shortcut name) | Twilio SMS |
 | **Email** | Gmail SMTP with HTML formatting | — |
-| **Notification** | macOS Shortcuts Bridge (`ShowNotification`) | — |
-| **Reminder** | macOS Shortcuts Bridge (`CreateReminder`) | — |
+| **Notification** | macOS Shortcuts Bridge | — |
+| **Reminder** | macOS Shortcuts Bridge | — |
 | **File draft** | Saved to `data/drafts/` as HTML/text | — |
 
 ## Persistent Scheduling
 
-The included APScheduler daemon runs all agents on their configured schedules. To run it as a macOS LaunchAgent (starts on login, restarts on crash):
+The project includes two long-running daemons, each with a LaunchAgent plist:
+
+| Daemon | Plist | Purpose |
+|--------|-------|---------|
+| Scheduler | `com.local-ai-agents.scheduler.plist` | Runs all agents on cron schedules |
+| Telegram Bot | `com.local-ai-agents.telegram-bot.plist` | Chat with Ollama from your phone |
+
+To install either (or both):
 
 ```bash
-# Edit the plist to set your username and paths
+# Edit the plist — replace YOURUSERNAME with your macOS username
 vim com.local-ai-agents.scheduler.plist
+vim com.local-ai-agents.telegram-bot.plist
 
 # Install
 cp com.local-ai-agents.scheduler.plist ~/Library/LaunchAgents/
+cp com.local-ai-agents.telegram-bot.plist ~/Library/LaunchAgents/
+
+# Load
 launchctl load ~/Library/LaunchAgents/com.local-ai-agents.scheduler.plist
+launchctl load ~/Library/LaunchAgents/com.local-ai-agents.telegram-bot.plist
 
-# Check logs
+# Check status
+launchctl list | grep local-ai-agents
+
+# View logs
 tail -f data/scheduler.log
+tail -f data/telegram-bot.log
 
-# Stop
+# Restart (KeepAlive will relaunch automatically)
+launchctl stop com.local-ai-agents.telegram-bot
+
+# Unload
 launchctl unload ~/Library/LaunchAgents/com.local-ai-agents.scheduler.plist
 ```
 
@@ -138,9 +222,14 @@ Copy `.env.example` to `.env` and fill in your values:
 | `PUBMED_API_KEY` | No | Free NCBI API key for higher rate limits ([register here](https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/)) |
 | `SHORTCUTS_BRIDGE_URL` | No | Shortcuts Bridge URL (default: `http://localhost:9876`) |
 | `SHORTCUTS_BRIDGE_TOKEN` | No | Auth token for Shortcuts Bridge |
+| `SHORTCUT_TEXT` | No | macOS Shortcut name for texting (default: `SendText`) |
+| `SHORTCUT_NOTIFICATION` | No | macOS Shortcut name for notifications (default: `ShowNotification`) |
+| `SHORTCUT_REMINDER` | No | macOS Shortcut name for reminders (default: `CreateReminder`) |
 | `EMAIL_SENDER` | For email | Gmail address to send from |
 | `EMAIL_RECIPIENT` | For email | Recipient email address |
 | `GMAIL_APP_PASSWORD` | For email | Gmail app password ([create one](https://myaccount.google.com/apppasswords)) |
+| `TELEGRAM_BOT_TOKEN` | For bot | Telegram bot token from @BotFather |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | For bot | Comma-separated allowed chat IDs |
 | `TWILIO_ACCOUNT_SID` | No | Twilio fallback SMS |
 | `TWILIO_AUTH_TOKEN` | No | Twilio fallback SMS |
 | `TWILIO_FROM_NUMBER` | No | Twilio fallback SMS |
@@ -161,35 +250,42 @@ uv run pytest tests/ -v
 ```
 local-ai-agents/
 ├── config/
-│   ├── agents.yaml          # Schedules, delivery, LLM settings
-│   ├── feeds.yaml           # RSS feeds and search terms
-│   └── grant_sources.yaml   # Grant search parameters
+│   ├── agents.yaml                 # Schedules, delivery, LLM settings
+│   ├── feeds.yaml                  # RSS feeds and search terms
+│   ├── grant_sources.yaml          # Grant search parameters
+│   ├── current_events.yaml.example # Template for current events topics
+│   └── telegram.yaml.example       # Template for Telegram bot prompt
 ├── src/
-│   ├── llm.py               # Ollama client (OpenAI-compat)
-│   ├── delivery.py          # Text, email, notification, file delivery
-│   ├── bridge_client.py     # Shortcuts Bridge HTTP client
+│   ├── llm.py                      # Ollama client (OpenAI-compat)
+│   ├── delivery.py                 # Text, email, notification, file delivery
+│   ├── bridge_client.py            # Shortcuts Bridge HTTP client
 │   ├── agents/
-│   │   ├── base.py          # BaseAgent ABC
-│   │   ├── literature.py    # PubMed/arXiv/bioRxiv monitor
-│   │   ├── email_triage.py  # Gmail label triage
-│   │   ├── news.py          # RSS news monitor
-│   │   └── grants.py        # NIH/NSF grant scanner
+│   │   ├── base.py                 # BaseAgent ABC
+│   │   ├── literature.py           # PubMed/arXiv/bioRxiv monitor
+│   │   ├── email_triage.py         # Gmail label triage
+│   │   ├── news.py                 # RSS news monitor
+│   │   ├── grants.py               # NIH/NSF grant scanner
+│   │   └── current_events.py       # Configurable topic news monitor
 │   └── sources/
-│       ├── pubmed.py        # PubMed E-utilities API
-│       ├── arxiv.py         # arXiv Atom API
-│       ├── biorxiv.py       # bioRxiv RSS
-│       ├── rss.py           # Generic RSS/Atom reader
-│       ├── gmail.py         # Mail.app AppleScript reader
-│       ├── nih_reporter.py  # NIH RePORTER API
-│       └── grants_gov.py    # Grants.gov RSS
+│       ├── pubmed.py               # PubMed E-utilities API
+│       ├── arxiv.py                # arXiv Atom API
+│       ├── biorxiv.py              # bioRxiv RSS
+│       ├── rss.py                  # Generic RSS/Atom reader
+│       ├── gmail.py                # Mail.app AppleScript reader
+│       ├── nih_reporter.py         # NIH RePORTER API
+│       ├── grants_gov.py           # Grants.gov RSS
+│       └── browser.py              # Playwright scraper (optional)
 ├── scripts/
-│   ├── run_agent.py         # CLI: run agents manually
-│   └── scheduler.py         # APScheduler daemon
+│   ├── run_agent.py                # CLI: run agents manually
+│   ├── scheduler.py                # APScheduler daemon
+│   ├── telegram_bot.py             # Telegram chat bot
+│   └── save_browser_auth.py        # One-time WSJ/NYT login
 ├── tests/
-├── data/                    # Runtime data (gitignored)
-│   ├── history.json         # Dedup tracking
-│   └── drafts/              # Saved email drafts
-└── com.local-ai-agents.scheduler.plist  # macOS LaunchAgent
+├── data/                           # Runtime data (gitignored)
+│   ├── history.json                # Dedup tracking
+│   └── drafts/                     # Saved email drafts
+├── com.local-ai-agents.scheduler.plist      # macOS LaunchAgent
+└── com.local-ai-agents.telegram-bot.plist   # macOS LaunchAgent
 ```
 
 ## License

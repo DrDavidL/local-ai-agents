@@ -75,6 +75,43 @@ def summarize(
     return None
 
 
+def chat(
+    messages: list[dict[str, str]],
+    *,
+    system_prompt: str = "You are a helpful assistant.",
+    model: str = "gemma3",
+    max_tokens: int = 2048,
+    temperature: float = 0.7,
+    base_url: str = "http://localhost:11434/v1",
+    max_retries: int = 2,
+) -> str | None:
+    """Multi-turn chat with Ollama. Returns assistant response or None."""
+    client = get_client(base_url)
+    full_messages = [{"role": "system", "content": system_prompt}] + messages
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.chat.completions.create(
+                model=model,
+                messages=full_messages,
+                max_completion_tokens=max_tokens,
+                temperature=temperature,
+            )
+            return response.choices[0].message.content
+        except (APIConnectionError, APITimeoutError) as exc:
+            if attempt < max_retries:
+                wait = 2 ** attempt
+                logger.warning("Chat call failed (attempt %d/%d), retrying in %ds: %s",
+                               attempt + 1, max_retries + 1, wait, exc)
+                time.sleep(wait)
+            else:
+                logger.error("Chat call failed after %d attempts: %s", max_retries + 1, exc)
+                return None
+        except Exception as exc:
+            logger.error("Unexpected chat error: %s", exc)
+            return None
+    return None
+
+
 def structured_output(
     system_prompt: str,
     content: str,

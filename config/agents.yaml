@@ -16,6 +16,12 @@ delivery:
   # Shortcut names are read from env vars:
   # SHORTCUT_TEXT, SHORTCUT_NOTIFICATION, SHORTCUT_REMINDER
 
+telegram:
+  # System prompt and personal context live in config/telegram.yaml (gitignored)
+  # Copy config/telegram.yaml.example to get started
+  max_history: 20         # message pairs kept per conversation
+  temperature: 0.7        # higher = more creative for chat
+
 agents:
   literature:
     enabled: true
@@ -45,3 +51,10 @@ agents:
       cron: "0 7 * * 1"  # Monday 7 AM
     delivery: [text, email, file]
     max_items: 10
+
+  current_events:
+    enabled: true
+    schedule:
+      cron: "0 7,12,18 * * *"  # 7 AM, noon, 6 PM daily
+    delivery: [text, email, notification]
+    max_items: 12

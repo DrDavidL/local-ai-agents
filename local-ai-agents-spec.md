@@ -12,7 +12,7 @@ These are already running on this Mac. Wire into them -- do not rebuild.
 
 | System | Location | What It Provides |
 |--------|----------|-----------------|
-| **Shortcuts Bridge** | `shortcuts_bridge.py` on `localhost:9876` | Send texts (TextDavid), emails (EmailDavid), reminders (CreateReminder), notifications (ShowNotification) via macOS Shortcuts |
+| **Shortcuts Bridge** | `shortcuts_bridge.py` on `localhost:9876` | Send texts (SendText), emails (SendEmail), reminders (CreateReminder), notifications (ShowNotification) via macOS Shortcuts |
 | **Gmail SMTP** | Gmail SMTP pattern | HTML email reports via `smtp.gmail.com:587` with `GMAIL_APP_PASSWORD` |
 | **Twilio SMS** | Twilio SMS pattern | SMS alerts via Twilio API (fallback if Shortcuts Bridge is down) |
 | **LaunchAgents** | `~/Library/LaunchAgents/` | macOS scheduling via plist files |
@@ -180,7 +180,7 @@ Limit to the 5 most relevant papers. Be concise.
 ```
 
 **Delivery:**
-- Text (via Shortcuts Bridge `TextDavid`): 2-3 sentence summary + count of papers
+- Text (via Shortcuts Bridge `SendText`): 2-3 sentence summary + count of papers
 - Email draft: Full HTML digest with paper details, saved to `data/drafts/literature_YYYY-MM-DD.html`
 - macOS notification: "5 new papers in clinical AI" (via `ShowNotification`)
 
@@ -320,10 +320,8 @@ delivery:
     smtp_port: 587
     # Credentials from EMAIL_SENDER, EMAIL_RECIPIENT, GMAIL_APP_PASSWORD env vars
   drafts_dir: "data/drafts"
-  text_shortcut: "TextDavid"
-  email_shortcut: "EmailDavid"
-  notification_shortcut: "ShowNotification"
-  reminder_shortcut: "CreateReminder"
+  # Shortcut names loaded from env vars:
+  # SHORTCUT_TEXT, SHORTCUT_NOTIFICATION, SHORTCUT_REMINDER
 
 agents:
   literature:
@@ -381,7 +379,7 @@ Unified delivery interface. Each method is fire-and-forget with graceful fallbac
 
 ```python
 def send_text(message: str) -> bool:
-    """Send via Shortcuts Bridge TextDavid. Falls back to Twilio if bridge is down."""
+    """Send via Shortcuts Bridge SendText. Falls back to Twilio if bridge is down."""
 
 def send_email(subject: str, html_body: str) -> bool:
     """Send via Gmail SMTP."""

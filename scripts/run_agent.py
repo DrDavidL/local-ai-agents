@@ -22,6 +22,7 @@ from src.agents.literature import LiteratureAgent
 from src.agents.email_triage import EmailTriageAgent
 from src.agents.news import NewsAgent
 from src.agents.grants import GrantsAgent
+from src.agents.current_events import CurrentEventsAgent
 from src import llm
 
 load_dotenv()
@@ -31,6 +32,7 @@ AGENTS = {
     "email": EmailTriageAgent,
     "news": NewsAgent,
     "grants": GrantsAgent,
+    "current": CurrentEventsAgent,
 }
 
 

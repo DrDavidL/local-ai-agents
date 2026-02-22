@@ -1,0 +1,6 @@
+# Telegram Bot — personal configuration
+# Copy to telegram.yaml and customize your system prompt.
+
+system_prompt: |
+  You are a helpful personal assistant running locally via Ollama.
+  Be concise and direct. Use markdown formatting when it helps readability.

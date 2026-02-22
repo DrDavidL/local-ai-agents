@@ -1,0 +1,55 @@
+# Current Events Agent Configuration
+# Copy to current_events.yaml and customize your topics and feeds.
+#
+# Each topic needs:
+#   key:        Short identifier (used internally and by the LLM)
+#   label:      Human-readable name for email headings
+#   color:      Hex color for email HTML sections
+#   feeds:      List of RSS feeds with name + url
+#   item_hint:  Guidance for the LLM on how many items to select from this topic
+
+topics:
+  world:
+    label: "World News"
+    color: "#cc3300"
+    item_hint: "3-4 items (focus on major developments)"
+    feeds:
+      - name: "AP News"
+        url: "https://rsshub.app/apnews/topics/apf-topnews"
+      - name: "NYT World"
+        url: "https://rss.nytimes.com/services/xml/rss/nyt/World.xml"
+
+  local:
+    label: "Local News"
+    color: "#0066cc"
+    item_hint: "2-3 items"
+    feeds:
+      - name: "Your Local News RSS"
+        url: "https://example.com/feed"
+
+  markets:
+    label: "Stock Market / Finance"
+    color: "#009933"
+    item_hint: "3-4 items (focus on moves and policy, not routine reporting)"
+    feeds:
+      - name: "MarketWatch"
+        url: "https://www.marketwatch.com/rss/topstories"
+      - name: "CNBC"
+        url: "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=100003114"
+
+  tech:
+    label: "Technology"
+    color: "#6600cc"
+    item_hint: "2-3 items (focus on significant launches, policy, or breakthroughs)"
+    feeds:
+      - name: "TechCrunch"
+        url: "https://techcrunch.com/feed/"
+      - name: "The Verge"
+        url: "https://www.theverge.com/rss/index.xml"
+
+# Optional: paywalled sites requiring Playwright + saved auth
+# Run: uv run python scripts/save_browser_auth.py
+paywalled: []
+  # - name: "WSJ"
+  #   url: "https://www.wsj.com"
+  #   enabled: false

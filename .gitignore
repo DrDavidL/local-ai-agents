@@ -6,6 +6,11 @@ data/history.json
 data/drafts/
 data/scheduler.log
 data/scheduler.err
+data/telegram-bot.log
+data/telegram-bot.err
+data/browser_auth.json
+config/current_events.yaml
+config/telegram.yaml
 .pytest_cache/
 dist/
 *.egg-info/
