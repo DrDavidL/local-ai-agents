@@ -16,7 +16,7 @@ All inference stays local. No cloud LLM API keys required.
 
 ## Telegram Bot
 
-Chat with your local Ollama from your phone via Telegram. Supports multi-turn conversations, configurable system prompt, and typing indicators.
+Chat with your local Ollama from your phone via Telegram. Supports multi-turn conversations, configurable system prompt, and on-demand agent execution.
 
 ```bash
 # Set up (one-time)
@@ -34,7 +34,29 @@ uv run python scripts/telegram_bot.py
 # Or install as a LaunchAgent (see Persistent Scheduling below)
 ```
 
-**Bot commands:** `/help`, `/clear`, `/id`, `/model`, `/system <prompt>`
+**Bot commands:**
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/run <agent>` | Run an agent: `literature`, `email`, `news`, `grants`, `current`, `all` |
+| `/agents` | List available agents |
+| `/clear` | Clear conversation history |
+| `/model` | Show current LLM model |
+| `/system <prompt>` | Change system prompt for this session |
+| `/id` | Show your Telegram chat ID |
+
+**Natural language triggers** — the bot detects intent and runs agents automatically:
+
+| You say | Agent triggered |
+|---------|-----------------|
+| "Any new papers?" | Literature |
+| "Check my email" | Email Triage |
+| "What's in the news?" | News |
+| "Market update?" | Current Events |
+| "Any grants this week?" | Grants |
+
+All other messages go to the LLM for regular conversation.
 
 ## Architecture
 
