@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Ensure dev tools are available
+uv sync --extra dev --quiet
+
 echo "==> Running ruff check..."
 uv run ruff check .
 
