@@ -89,7 +89,7 @@ Ollama (localhost:11434)
 - **macOS** (uses AppleScript for Gmail reading, Shortcuts for notifications)
 - **[Ollama](https://ollama.com/)** with a model installed (e.g. `ollama pull gemma3`)
 - **[uv](https://docs.astral.sh/uv/)** (Python package manager)
-- **[Shortcuts Bridge](https://github.com/your-org/shortcuts-bridge)** (optional, for text/notification delivery)
+- **[Shortcuts Bridge](https://github.com/DrDavidL/llm-actions)** (optional, for text/notification delivery)
 
 ## Quick Start
 
