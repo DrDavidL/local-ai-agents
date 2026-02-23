@@ -297,10 +297,26 @@ chmod 700 data/
 
 Agents track previously seen items in `data/history.json` to avoid sending duplicate summaries. Each agent maintains its own ID list (PubMed PMIDs, arXiv IDs, DOIs, FOA numbers, etc.), capped at 5,000 entries.
 
-## Testing
+## Development
 
 ```bash
+# Install dev dependencies (ruff, pip-audit, pytest)
+uv sync --extra dev
+
+# Lint
+uv run ruff check .
+
+# Dependency vulnerability scan
+uv run pip-audit
+
+# Tests
 uv run pytest tests/ -v
+```
+
+A pre-push git hook runs all three checks automatically. To install it:
+
+```bash
+ln -sf ../../scripts/pre-push.sh .git/hooks/pre-push
 ```
 
 ## Project Structure
@@ -338,7 +354,8 @@ local-ai-agents/
 │   ├── run_agent.py                # CLI: run agents manually
 │   ├── scheduler.py                # APScheduler daemon
 │   ├── telegram_bot.py             # Telegram chat bot
-│   └── save_browser_auth.py        # One-time WSJ/NYT login
+│   ├── save_browser_auth.py        # One-time WSJ/NYT login
+│   └── pre-push.sh                 # Pre-push hook (ruff, pip-audit, tests)
 ├── tests/
 ├── data/                           # Runtime data (gitignored)
 │   ├── history.json                # Dedup tracking
