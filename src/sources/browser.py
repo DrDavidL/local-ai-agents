@@ -60,7 +60,7 @@ def scrape_headlines(
     articles = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, channel="chrome")
             context_kwargs = {}
             if auth_path:
                 context_kwargs["storage_state"] = str(auth_path)

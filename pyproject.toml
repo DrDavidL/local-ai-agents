@@ -22,6 +22,7 @@ dev = [
 ]
 scraping = [
     "playwright",
+    "cryptography",
 ]
 sms = [
     "twilio",
