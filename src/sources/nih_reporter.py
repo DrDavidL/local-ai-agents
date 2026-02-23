@@ -68,7 +68,6 @@ def _parse_results(data: dict) -> list[NIHOpportunity]:
 
     for item in results:
         try:
-            foa = item.get("award_notice_date", "") or item.get("opportunity_number", "")
             title = item.get("project_title", "")
             agency = item.get("agency_ic_fundings", [{}])
             ic_code = agency[0].get("abbreviation", "") if agency else ""

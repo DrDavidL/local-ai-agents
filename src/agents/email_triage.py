@@ -104,7 +104,6 @@ class EmailTriageAgent(BaseAgent):
         }
 
     def deliver(self, result: dict[str, Any]) -> None:
-        summary = result.get("summary", "")
         urgent_count = result.get("urgent_count", 0)
         items = result.get("items", [])
         today = datetime.now().strftime("%Y-%m-%d")

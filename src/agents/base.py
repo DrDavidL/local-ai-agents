@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from src import llm, delivery
+from src import llm
 
 logger = logging.getLogger(__name__)
 

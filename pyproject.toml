@@ -17,6 +17,8 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-mock",
+    "ruff",
+    "pip-audit",
 ]
 scraping = [
     "playwright",

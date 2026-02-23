@@ -160,7 +160,7 @@ def _deduplicate(labels: list[DrugLabel]) -> list[DrugLabel]:
             unique.append(label)
 
     # Sort: single-ingredient first (no "AND" in normalized name)
-    unique.sort(key=lambda l: " AND " in _normalize_generic(l.generic_name))
+    unique.sort(key=lambda label: " AND " in _normalize_generic(label.generic_name))
     return unique
 
 

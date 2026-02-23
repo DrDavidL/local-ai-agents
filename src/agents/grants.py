@@ -139,7 +139,6 @@ class GrantsAgent(BaseAgent):
         }
 
     def deliver(self, result: dict[str, Any]) -> None:
-        summary = result.get("summary", "")
         opportunities = result.get("opportunities", [])
         today = datetime.now().strftime("%Y-%m-%d")
 

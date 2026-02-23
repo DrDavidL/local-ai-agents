@@ -542,7 +542,7 @@ def ad_hoc_medication(drug_name: str, focus: str | None) -> str:
         others = options[1:]
         names = [o.brand_name or o.generic_name for o in others]
         result += "\n\n_Also available:_ " + ", ".join(names)
-        result += f"\n_Use_ `/med <name>` _to look up a specific product._"
+        result += "\n_Use_ `/med <name>` _to look up a specific product._"
 
     return result
 
