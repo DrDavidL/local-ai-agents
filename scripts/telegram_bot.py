@@ -6,6 +6,7 @@ Also supports triggering agents via /run commands or natural language.
 
 from __future__ import annotations
 
+import datetime
 import logging
 import os
 import re
@@ -876,6 +877,8 @@ def handle_message(
         return
 
     sys_prompt = custom_prompts.get(chat_id, base_system_prompt)
+    now = datetime.datetime.now().strftime("%A, %B %-d, %Y at %-I:%M %p")
+    sys_prompt = f"{sys_prompt}\n\nCurrent date and time: {now}"
     temperature = tg_cfg.get("temperature", ollama_cfg.get("temperature", 0.7))
 
     response = llm.chat(

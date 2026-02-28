@@ -2,7 +2,7 @@
 
 ## Overview
 
-Scheduled AI agents running on a home Mac via Ollama (local LLM). Four agents monitor literature, email, news, and grants, then deliver summaries via text, email, and notifications through the existing Shortcuts Bridge infrastructure. Model configurable in `config/agents.yaml` (currently `qwen 3.5 27b`).
+Scheduled AI agents running on a home Mac via Ollama (local LLM). Four agents monitor literature, email, news, and grants, then deliver summaries via text, email, and notifications through the existing Shortcuts Bridge infrastructure. Model configurable in `config/agents.yaml` (currently `lfm2`).
 
 ## Architecture
 
