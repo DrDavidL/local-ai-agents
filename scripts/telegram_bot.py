@@ -45,7 +45,9 @@ MAX_MSG_LEN = 4096  # Telegram's per-message character limit
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a helpful personal assistant running locally via Ollama. "
-    "Be concise and direct. Use markdown formatting when it helps readability."
+    "Be concise and direct. You are communicating via Telegram which only supports "
+    "*bold*, _italic_, and `code` formatting. Never use # headers, ** bold **, "
+    "> quotes, or other markdown. Use plain text with line breaks for structure."
 )
 
 # Per-chat conversation history: chat_id -> list of {"role": ..., "content": ...}
